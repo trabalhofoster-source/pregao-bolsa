@@ -21,6 +21,63 @@ def formatar_e_imprimir(mensagem: str) -> None:
     print(f"\n{tipo}\n{mensagem}")
 
 
+def receber_mensagens(sock: socket.socket) -> None:
+    global conectado
+    while conectado:
+        try:
+            dados = sock.recv(4096)
+            if not dados:
+                print("\n[INFO]\nConexão encerrada pelo servidor.")
+                break
+            mensagem = dados.decode(errors='ignore')
+            formatar_e_imprimir(mensagem)
+        except OSError:
+            break
+        except Exception as e:
+            print(f"\n[ALERTA]\nErro ao receber dados: {e}")
+            break
+
+    conectado = False
+
+
+def enviar_comandos(sock: socket.socket) -> None:
+    global conectado
+    print("Comandos disponíveis:")
+    print("  :buy <ATIVO> <QTD>")
+    print("  :sell <ATIVO> <QTD>")
+    print("  :carteira")
+    print("  :cotacao")
+    print("  :exit (encerra a conexão)")
+    print()
+
+    while conectado:
+        try:
+            comando = input("> ").strip()
+            if not comando:
+                continue
+
+            if comando == ':exit':
+                conectado = False
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+                print("Conexão encerrada pelo cliente.")
+                break
+
+            sock.send((comando + "\n").encode())
+        except (EOFError, KeyboardInterrupt):
+            conectado = False
+            try:
+                sock.close()
+            except OSError:
+                pass
+            print("\nConexão encerrada pelo cliente (interrupção).")
+            break
+        except OSError:
+            break
+
+
 def main():
     global conectado
 
@@ -39,27 +96,19 @@ def main():
     conectado = True
 
     horario = time.strftime('%H:%M:%S')
-    print(f"\n{horario}: CONECTADO!!\n")
+    print(f"\n{horario}: CONECTADO!!")
+    print("Aguardando cotações do servidor...\n")
 
-    try:
-        dados = sock.recv(1024)
-        if dados:
-            mensagem = dados.decode(errors='ignore')
-            formatar_e_imprimir(mensagem)
-    except Exception as e:
-        print(f"\n[ALERTA]\nErro ao receber: {e}")
+    thread_receber = threading.Thread(
+        target=receber_mensagens,
+        args=(sock,),
+        daemon=True
+    )
+    thread_receber.start()
 
-    input("\nPressione ENTER para continuar... ")
-
-    try:
-        sock.send("\n".encode())
-    except OSError:
-        pass
-
-    sock.close()
-    conectado = False
-    print("\n[INFO]\nConexão encerrada.")
+    enviar_comandos(sock)
 
 
 if __name__ == "__main__":
     main()
+
