@@ -1,7 +1,7 @@
 import socket
-from threading import Thread
+import threading
 import random
-from time import sleep, strftime
+import time
 import os
 
 servidor_socket = None
@@ -21,7 +21,7 @@ carteira_clientes:dict[str, dict[str, float|dict[str, int]]] = {}
 clientes_conectados:list[tuple[str,str]] = []
 
 def gerar_mensagem_cotacoes()->str:
-    mensagem:str = f"\n--- COTAÇÕES {strftime('%H:%M:%S')} ---\n"
+    mensagem:str = f"\n--- COTAÇÕES {time.strftime('%H:%M:%S')} ---\n"
     for acao, preco in preco_acoes.items():
         mensagem += f"{acao}: R$ {preco:.2f}\n"
     return mensagem
@@ -33,10 +33,7 @@ def atualizar_cotacoes()->None:
             variacao:float = round(random.uniform(-1.0, 1.0), 2)
             novo_preco:float = preco_acoes[acao] + variacao
             preco_acoes[acao] = max(10.0, min(30.0, round(novo_preco, 2)))
-        sleep(15)
-
-def menu_opcoes()->str:
-    return "Comandos disponíveis:\n  :menu\n  :buy <ATIVO> <QTD>\n  :sell <ATIVO> <QTD>\n  :carteira\n  :cotacao\n  :exit (encerra a conexão)\n\n>"
+        time.sleep(15)
 
 def processar_cliente(conexao:socket.socket, endereco:str)->None:
     if endereco not in carteira_clientes:
@@ -106,13 +103,9 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
             elif comando == ':cotacao':
                 mensagem:str = gerar_mensagem_cotacoes()
                 conexao.send(mensagem.encode())
-            
-            elif comando == ':menu':
-                conexao.send(menu_opcoes().encode())
                 
             else:
                 conexao.send(b'Comando invalido\n')
-                
         except:
             break
     
@@ -139,7 +132,7 @@ def servidor_principal()->None:
             n = len(clientes_conectados)
             print(f"\rCliente {endereco} conectado. Clientes conectados: {n}                    \nEscolha: ", end="")
 
-            thread_cliente:Thread = Thread(
+            thread_cliente:threading.Thread = threading.Thread(
                 target=processar_cliente, 
                 args=(conexao, endereco),
                 daemon=True
@@ -169,11 +162,11 @@ def menu_principal():
             os.system('cls' if os.name == 'nt' else 'clear')
             terminar_servidor()
 
-            Thread(target=atualizar_cotacoes, daemon=True).start()
-            Thread(target=servidor_principal, daemon=True).start()
+            threading.Thread(target=atualizar_cotacoes, daemon=True).start()
+            threading.Thread(target=servidor_principal, daemon=True).start()
 
             print("Servidor iniciado!\n")
-            sleep(2)
+            time.sleep(2)
             
         elif opcao == '2' and servidor_ativo:
             servidor_ativo = False
@@ -182,7 +175,7 @@ def menu_principal():
             if servidor_socket:
                 servidor_socket.close()
             print("Servidor desligado!\n")
-            sleep(2)
+            time.sleep(2)
             
         elif opcao == '3':
             if servidor_ativo:

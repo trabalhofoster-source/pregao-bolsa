@@ -5,9 +5,7 @@ import os
 
 conectado = False
 
-
 def formatar_e_imprimir(mensagem: str) -> None:
-    os.system('cls' if os.name == 'nt' else 'clear')
     mensagem:str = mensagem.strip()
     if not mensagem:
         return
@@ -41,8 +39,7 @@ def receber_mensagens(sock: socket.socket) -> None:
     conectado = False
 
 def menu_opcoes()->None:
-    print("Comandos disponíveis:")
-    print("  :menu")
+    print("\nComandos disponíveis:")
     print("  :buy <ATIVO> <QTD>")
     print("  :sell <ATIVO> <QTD>")
     print("  :carteira")
@@ -68,7 +65,8 @@ def enviar_comandos(sock: socket.socket) -> None:
             comando = input("> ").strip()
             if not comando:
                 continue
-
+            
+            os.system('cls' if os.name == 'nt' else 'clear')
             if comando == ':exit':
                 encerrar_conexao(sock)
                 break
@@ -85,6 +83,8 @@ def enviar_comandos(sock: socket.socket) -> None:
         except OSError:
             break
 
+        time.sleep(0.5)
+        menu_opcoes()
 
 def main():
     global conectado
