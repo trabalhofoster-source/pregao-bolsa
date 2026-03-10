@@ -6,7 +6,7 @@ import os
 conectado = False
 
 def formatar_e_imprimir(mensagem: str) -> None:
-    mensagem:str = mensagem.strip()
+    mensagem = mensagem.strip()
     if not mensagem:
         return
     
@@ -56,13 +56,17 @@ def encerrar_conexao(sock:socket.socket)->None:
         pass
     print("Conexão encerrada pelo cliente.")
 
+def comando_input()->str:
+    comando:str = input("> ").strip()
+    return comando
+
 def enviar_comandos(sock: socket.socket) -> None:
     global conectado
     menu_opcoes()
 
     while conectado:
         try:
-            comando = input("> ").strip()
+            comando = comando_input()
             if not comando:
                 continue
             

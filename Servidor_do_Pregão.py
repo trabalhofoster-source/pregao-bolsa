@@ -20,11 +20,22 @@ preco_acoes:dict[str, float] = {
 carteira_clientes:dict[str, dict[str, float|dict[str, int]]] = {}
 clientes_conectados:list[tuple[str,str]] = []
 
-def gerar_mensagem_cotacoes()->str:
-    mensagem:str = f"\n--- COTAÇÕES {time.strftime('%H:%M:%S')} ---\n"
-    for acao, preco in preco_acoes.items():
-        mensagem += f"{acao}: R$ {preco:.2f}\n"
-    return mensagem
+att_cotacoes:bool = False
+def gerar_mensagem_cotacoes(conexao:socket.socket)->None:
+    global att_cotacoes
+    att_cotacoes = True
+    count:int = 0
+    while(att_cotacoes):
+        if(count%5==0):
+            mensagem:str = f"\n--- COTAÇÕES {time.strftime('%H:%M:%S')} ---\n - (atualizações a cada 5s) -\n"
+        else:
+            mensagem:str = f"\n--- COTAÇÕES {time.strftime('%H:%M:%S')} ---\n"
+        for acao, preco in preco_acoes.items():
+            mensagem += f"{acao}: R$ {preco:.2f}\n"
+        conexao.send(mensagem.encode())
+        time.sleep(5)
+        count+=1
+        
 
 def atualizar_cotacoes()->None:
     global preco_acoes
@@ -36,6 +47,7 @@ def atualizar_cotacoes()->None:
         time.sleep(15)
 
 def processar_cliente(conexao:socket.socket, endereco:str)->None:
+    global att_cotacoes
     if endereco not in carteira_clientes:
         carteira_clientes[endereco] = {
             'saldo': 10000.0,
@@ -43,16 +55,19 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
         }
     
     dados_cliente:dict[str, float|dict[str, int]] = carteira_clientes[endereco]
+    loop_cotacoes = threading.Thread(target=gerar_mensagem_cotacoes, args=(conexao,), daemon=True)
     
     while True:
         try:
             comando:str = conexao.recv(1024).decode().strip()
             if not comando:
                 break
-                
             partes:list[str] = comando.split()
             
             if partes[0] == ':buy' and len(partes) == 3:
+                if(att_cotacoes):
+                    att_cotacoes = False
+                    time.sleep(5)
                 acao = partes[1].upper()
                 try:
                     quantidade:int = int(partes[2])
@@ -77,6 +92,9 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                     conexao.send(mensagem.encode())
                     
             elif partes[0] == ':sell' and len(partes) == 3:
+                if(att_cotacoes):
+                    att_cotacoes = False
+                    time.sleep(5)
                 acao = partes[1].upper()
                 try:
                     quantidade = int(partes[2])
@@ -93,6 +111,9 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                     conexao.send(f'Venda realizada: {quantidade} {acao}\n'.encode())
                     
             elif comando == ':carteira':
+                if(att_cotacoes):
+                    att_cotacoes = False
+                    time.sleep(5)
                 resposta:str = f"Saldo: R$ {dados_cliente['saldo']:.2f}\n"
                 for acao, qtd in dados_cliente['ativos'].items():
                     if qtd > 0:
@@ -101,10 +122,14 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                 conexao.send(resposta.encode())
             
             elif comando == ':cotacao':
-                mensagem:str = gerar_mensagem_cotacoes()
-                conexao.send(mensagem.encode())
+                loop_cotacoes.start()
+                # mensagem:str = gerar_mensagem_cotacoes()
+                # conexao.send(mensagem.encode())
                 
             else:
+                if(att_cotacoes):
+                    att_cotacoes = False
+                    time.sleep(5)
                 conexao.send(b'Comando invalido\n')
         except:
             break
