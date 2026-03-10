@@ -7,10 +7,11 @@ conectado = False
 
 
 def formatar_e_imprimir(mensagem: str) -> None:
-    mensagem = mensagem.strip()
+    os.system('cls' if os.name == 'nt' else 'clear')
+    mensagem:str = mensagem.strip()
     if not mensagem:
         return
-
+    
     if '--- COTAÇÕES' in mensagem:
         tipo = '[FEED]'
     elif 'ERRO' in mensagem.upper():
@@ -25,7 +26,7 @@ def receber_mensagens(sock: socket.socket) -> None:
     global conectado
     while conectado:
         try:
-            dados = sock.recv(4096)
+            dados:bytes = sock.recv(4096)
             if not dados:
                 print("\n[INFO]\nConexão encerrada pelo servidor.")
                 break
@@ -39,16 +40,28 @@ def receber_mensagens(sock: socket.socket) -> None:
 
     conectado = False
 
-
-def enviar_comandos(sock: socket.socket) -> None:
-    global conectado
+def menu_opcoes()->None:
     print("Comandos disponíveis:")
+    print("  :menu")
     print("  :buy <ATIVO> <QTD>")
     print("  :sell <ATIVO> <QTD>")
     print("  :carteira")
     print("  :cotacao")
     print("  :exit (encerra a conexão)")
     print()
+
+def encerrar_conexao(sock:socket.socket)->None:
+    global conectado
+    conectado = False
+    try:
+        sock.close()
+    except OSError:
+        pass
+    print("Conexão encerrada pelo cliente.")
+
+def enviar_comandos(sock: socket.socket) -> None:
+    global conectado
+    menu_opcoes()
 
     while conectado:
         try:
@@ -57,14 +70,9 @@ def enviar_comandos(sock: socket.socket) -> None:
                 continue
 
             if comando == ':exit':
-                conectado = False
-                try:
-                    sock.close()
-                except OSError:
-                    pass
-                print("Conexão encerrada pelo cliente.")
+                encerrar_conexao(sock)
                 break
-
+            
             sock.send((comando + "\n").encode())
         except (EOFError, KeyboardInterrupt):
             conectado = False

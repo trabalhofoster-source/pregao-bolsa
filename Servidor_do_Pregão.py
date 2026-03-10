@@ -1,58 +1,64 @@
 import socket
-import threading
+from threading import Thread
 import random
-import time
+from time import sleep, strftime
 import os
 
 servidor_socket = None
 servidor_ativo = False
 
-preco_acoes = {
+preco_acoes:dict[str, float] = {
     'SANB11': 20.0,
     'BBAS3': 20.0,
     'BBDC4': 20.0,
-    'ITUB4': 20.0
+    'ITUB4': 20.0,
+    'PETR4': 20.0,
+    'VALE3': 20.0,
+    'MGLU3': 20.0
 }
 
-carteira_clientes = {}
-clientes_conectados = []
+carteira_clientes:dict[str, dict[str, float|dict[str, int]]] = {}
+clientes_conectados:list[tuple[str,str]] = []
 
-def gerar_mensagem_cotacoes():
-    mensagem = f"\n--- COTAÇÕES {time.strftime('%H:%M:%S')} ---\n"
+def gerar_mensagem_cotacoes()->str:
+    mensagem:str = f"\n--- COTAÇÕES {strftime('%H:%M:%S')} ---\n"
     for acao, preco in preco_acoes.items():
         mensagem += f"{acao}: R$ {preco:.2f}\n"
     return mensagem
 
-def atualizar_cotacoes():
+def atualizar_cotacoes()->None:
     global preco_acoes
     while servidor_ativo:
         for acao in preco_acoes:
-            variacao = round(random.uniform(-1.0, 1.0), 2)
-            novo_preco = preco_acoes[acao] + variacao
+            variacao:float = round(random.uniform(-1.0, 1.0), 2)
+            novo_preco:float = preco_acoes[acao] + variacao
             preco_acoes[acao] = max(10.0, min(30.0, round(novo_preco, 2)))
-        time.sleep(15)
+        sleep(15)
 
-def processar_cliente(conexao, endereco):
+def menu_opcoes()->str:
+    return "Comandos disponíveis:\n  :menu\n  :buy <ATIVO> <QTD>\n  :sell <ATIVO> <QTD>\n  :carteira\n  :cotacao\n  :exit (encerra a conexão)\n\n>"
+
+def processar_cliente(conexao:socket.socket, endereco:str)->None:
     if endereco not in carteira_clientes:
         carteira_clientes[endereco] = {
             'saldo': 10000.0,
             'ativos': {acao: 0 for acao in preco_acoes}
         }
     
-    dados_cliente = carteira_clientes[endereco]
+    dados_cliente:dict[str, float|dict[str, int]] = carteira_clientes[endereco]
     
     while True:
         try:
-            comando = conexao.recv(1024).decode().strip()
+            comando:str = conexao.recv(1024).decode().strip()
             if not comando:
                 break
                 
-            partes = comando.split()
+            partes:list[str] = comando.split()
             
             if partes[0] == ':buy' and len(partes) == 3:
                 acao = partes[1].upper()
                 try:
-                    quantidade = int(partes[2])
+                    quantidade:int = int(partes[2])
                 except ValueError:
                     conexao.send(b'ERRO: Quantidade invalida\n')
                     continue
@@ -67,7 +73,7 @@ def processar_cliente(conexao, endereco):
                     dados_cliente['saldo'] -= valor_total
                     dados_cliente['ativos'][acao] += quantidade
 
-                    mensagem = (
+                    mensagem:str = (
                         f'Compra realizada: {quantidade} {acao} '
                         f'a R$ {preco_unitario:.2f} (total R$ {valor_total:.2f})\n'
                     )
@@ -90,16 +96,19 @@ def processar_cliente(conexao, endereco):
                     conexao.send(f'Venda realizada: {quantidade} {acao}\n'.encode())
                     
             elif comando == ':carteira':
-                resposta = f"Saldo: R$ {dados_cliente['saldo']:.2f}\n"
+                resposta:str = f"Saldo: R$ {dados_cliente['saldo']:.2f}\n"
                 for acao, qtd in dados_cliente['ativos'].items():
                     if qtd > 0:
-                        valor_total = preco_acoes[acao] * qtd
+                        valor_total:int|float = preco_acoes[acao] * qtd
                         resposta += f"{acao}: {qtd} = R$ {valor_total:.2f}\n"
                 conexao.send(resposta.encode())
             
             elif comando == ':cotacao':
-                mensagem = gerar_mensagem_cotacoes()
+                mensagem:str = gerar_mensagem_cotacoes()
                 conexao.send(mensagem.encode())
+            
+            elif comando == ':menu':
+                conexao.send(menu_opcoes().encode())
                 
             else:
                 conexao.send(b'Comando invalido\n')
@@ -110,10 +119,10 @@ def processar_cliente(conexao, endereco):
     conexao.close()
     if (conexao, endereco) in clientes_conectados:
         clientes_conectados.remove((conexao, endereco))
-        n = len(clientes_conectados)
+        n:int = len(clientes_conectados)
         print(f"\rCliente {endereco} saiu. Clientes conectados: {n}                    \nEscolha: ", end="")
 
-def servidor_principal():
+def servidor_principal()->None:
     global servidor_socket
 
     servidor_socket = socket.socket()
@@ -130,7 +139,7 @@ def servidor_principal():
             n = len(clientes_conectados)
             print(f"\rCliente {endereco} conectado. Clientes conectados: {n}                    \nEscolha: ", end="")
 
-            thread_cliente = threading.Thread(
+            thread_cliente:Thread = Thread(
                 target=processar_cliente, 
                 args=(conexao, endereco),
                 daemon=True
@@ -153,18 +162,18 @@ def menu_principal():
     os.system('cls' if os.name == 'nt' else 'clear')
     terminar_servidor()
     while True:
-        opcao = input("Escolha: ")
+        opcao:str = input("Escolha: ")
         
         if opcao == '1' and not servidor_ativo:
             servidor_ativo = True
             os.system('cls' if os.name == 'nt' else 'clear')
             terminar_servidor()
 
-            threading.Thread(target=atualizar_cotacoes, daemon=True).start()
-            threading.Thread(target=servidor_principal, daemon=True).start()
+            Thread(target=atualizar_cotacoes, daemon=True).start()
+            Thread(target=servidor_principal, daemon=True).start()
 
             print("Servidor iniciado!\n")
-            time.sleep(2)
+            sleep(2)
             
         elif opcao == '2' and servidor_ativo:
             servidor_ativo = False
@@ -173,13 +182,14 @@ def menu_principal():
             if servidor_socket:
                 servidor_socket.close()
             print("Servidor desligado!\n")
-            time.sleep(2)
+            sleep(2)
             
         elif opcao == '3':
             if servidor_ativo:
                 servidor_ativo = False
                 if servidor_socket:
                     servidor_socket.close()
+            os.system('cls' if os.name == 'nt' else 'clear')
             print("Programa encerrado!")
             break
         else:
