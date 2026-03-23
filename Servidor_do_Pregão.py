@@ -3,9 +3,32 @@ import threading
 import random
 import time
 import os
+import json
 
 servidor_socket = None
 servidor_ativo = False
+
+DIRETORIO_CARTEIRAS = 'carteiras_clientes'
+
+
+def _normalizar_endereco(endereco):
+    if isinstance(endereco, tuple):
+        host, porta = endereco
+        return f"{host}_{porta}"
+    return str(endereco).replace(':', '_').replace('/', '_').replace('\\', '_')
+
+
+def _caminho_json_cliente(endereco):
+    if not os.path.exists(DIRETORIO_CARTEIRAS):
+        os.makedirs(DIRETORIO_CARTEIRAS, exist_ok=True)
+    nome = _normalizar_endereco(endereco)
+    return os.path.join(DIRETORIO_CARTEIRAS, f"{nome}.json")
+
+
+def criar_carteira_json(endereco, carteira):
+    caminho = _caminho_json_cliente(endereco)
+    with open(caminho, 'w', encoding='utf-8') as f:
+        json.dump(carteira, f, ensure_ascii=False, indent=4)
 
 preco_acoes:dict[str, float] = {
     'SANB11': 20.0,
@@ -17,8 +40,27 @@ preco_acoes:dict[str, float] = {
     'MGLU3': 20.0
 }
 
-carteira_clientes:dict[str, dict[str, float|dict[str, int]]] = {}
+# Agora a carteira é persistida via JSON de cada cliente
+# carteira_clientes:dict[str, dict[str, float|dict[str, int]]] = {}
 clientes_conectados:list[tuple[str,str]] = []
+
+
+def carregar_carteira(endereco):
+    caminho = _caminho_json_cliente(endereco)
+    if os.path.exists(caminho):
+        try:
+            with open(caminho, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
+def salvar_carteira(endereco, carteira):
+    caminho = _caminho_json_cliente(endereco)
+    with open(caminho, 'w', encoding='utf-8') as f:
+        json.dump(carteira, f, ensure_ascii=False, indent=4)
+
 
 att_cotacoes:bool = False
 def gerar_mensagem_cotacoes(conexao:socket.socket)->None:
@@ -48,13 +90,15 @@ def atualizar_cotacoes()->None:
 
 def processar_cliente(conexao:socket.socket, endereco:str)->None:
     global att_cotacoes
-    if endereco not in carteira_clientes:
-        carteira_clientes[endereco] = {
+
+    dados_cliente = carregar_carteira(endereco)
+    if dados_cliente is None:
+        dados_cliente = {
             'saldo': 10000.0,
             'ativos': {acao: 0 for acao in preco_acoes}
         }
-    
-    dados_cliente:dict[str, float|dict[str, int]] = carteira_clientes[endereco]
+        salvar_carteira(endereco, dados_cliente)
+
     loop_cotacoes = threading.Thread(target=gerar_mensagem_cotacoes, args=(conexao,), daemon=True)
     
     while True:
@@ -84,6 +128,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                     valor_total = preco_unitario * quantidade
                     dados_cliente['saldo'] -= valor_total
                     dados_cliente['ativos'][acao] += quantidade
+                    salvar_carteira(endereco, dados_cliente)
 
                     mensagem:str = (
                         f'Compra realizada: {quantidade} {acao} '
@@ -107,6 +152,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                 else:
                     dados_cliente['saldo'] += preco_acoes[acao] * quantidade
                     dados_cliente['ativos'][acao] -= quantidade
+                    salvar_carteira(endereco, dados_cliente)
 
                     conexao.send(f'Venda realizada: {quantidade} {acao}\n'.encode())
                     
@@ -134,6 +180,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
         except:
             break
     
+    salvar_carteira(endereco, dados_cliente)
     conexao.close()
     if (conexao, endereco) in clientes_conectados:
         clientes_conectados.remove((conexao, endereco))
