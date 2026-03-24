@@ -3,7 +3,8 @@ import threading
 import time
 import os
 
-conectado = False
+conectado = False  
+logado = False # pra validar o login do cliente
 
 def formatar_e_imprimir(mensagem: str) -> None:
     mensagem = mensagem.strip()
@@ -22,6 +23,7 @@ def formatar_e_imprimir(mensagem: str) -> None:
 
 def receber_mensagens(sock: socket.socket) -> None:
     global conectado
+    global logado
     while conectado:
         try:
             dados:bytes = sock.recv(4096)
@@ -29,7 +31,13 @@ def receber_mensagens(sock: socket.socket) -> None:
                 print("\n[INFO]\nConexão encerrada pelo servidor.")
                 break
             mensagem = dados.decode(errors='ignore')
+
+            if("OK" in mensagem):
+                logado = True
+                continue
+
             formatar_e_imprimir(mensagem)
+
         except OSError:
             break
         except Exception as e:
@@ -62,9 +70,11 @@ def comando_input()->str:
 
 def enviar_comandos(sock: socket.socket) -> None:
     global conectado
-    menu_opcoes()
+    global logado
 
     while conectado:
+        if(logado):
+            menu_opcoes()
         try:
             comando = comando_input()
             if not comando:
@@ -86,13 +96,12 @@ def enviar_comandos(sock: socket.socket) -> None:
             break
         except OSError:
             break
-
         time.sleep(0.5)
-        menu_opcoes()
+        
 
 def main():
     global conectado
-
+    
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 50)
     print("CLIENTE - PREGÃO DA BOLSA DE VALORES")
@@ -106,6 +115,10 @@ def main():
         return
 
     conectado = True
+    thread_receber = threading.Thread(target=receber_mensagens, args=(sock,), daemon=True)
+    thread_receber.start()
+
+    print("Siga as instruções na tela para Login ou Cadastro.")
 
     horario = time.strftime('%H:%M:%S')
     print(f"\n{horario}: CONECTADO!!")

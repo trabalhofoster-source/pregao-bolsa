@@ -11,24 +11,75 @@ servidor_ativo = False
 DIRETORIO_CARTEIRAS = 'carteiras_clientes'
 
 
-def _normalizar_endereco(endereco):
-    if isinstance(endereco, tuple):
-        host, porta = endereco
-        return f"{host}_{porta}"
-    return str(endereco).replace(':', '_').replace('/', '_').replace('\\', '_')
+# def _normalizar_endereco(endereco):
+#     if isinstance(endereco, tuple):
+#         host, porta = endereco
+#         return f"{host}_{porta}"
+#     return str(endereco).replace(':', '_').replace('/', '_').replace('\\', '_')
 
+# def _caminho_json_cliente(endereco):
+#     if not os.path.exists(DIRETORIO_CARTEIRAS):
+#         os.makedirs(DIRETORIO_CARTEIRAS, exist_ok=True)
+#     nome = _normalizar_endereco(endereco)
+#     return os.path.join(DIRETORIO_CARTEIRAS, f"{nome}.json")
 
-def _caminho_json_cliente(endereco):
+def _caminho_json_cliente():
     if not os.path.exists(DIRETORIO_CARTEIRAS):
         os.makedirs(DIRETORIO_CARTEIRAS, exist_ok=True)
-    nome = _normalizar_endereco(endereco)
-    return os.path.join(DIRETORIO_CARTEIRAS, f"{nome}.json")
+    return os.path.join(DIRETORIO_CARTEIRAS, f"clientes.json")
 
+##################
+#### CADASTRO ####
+##################
 
-def criar_carteira_json(endereco, carteira):
-    caminho = _caminho_json_cliente(endereco)
+def criar_login(conexao:socket.socket)->None:
+    conexao.send(b"Digite seu email: ")
+    email:str = conexao.recv(1024).decode().strip()
+    while(True):
+        conexao.send(b"Digite uma senha: ")
+        senha:str = conexao.recv(1024).decode().strip()
+        conexao.send(b"Confirme sua senha: ")
+        segunda_senha:str = conexao.recv(1024).decode().strip()
+        if(senha != segunda_senha):
+            conexao.send("As senhas nao conferem".encode())
+            continue
+        else:
+            break
+
+    caminho = _caminho_json_cliente()
+    if(os.path.exists(caminho)):
+        try:
+            with open(caminho, 'r', encoding='utf-8') as f:
+                # Verifica se o arquivo não está vazio antes de carregar
+                conteudo = f.read()
+                if conteudo.strip(): # Se tiver algum texto
+                    clientes = json.loads(conteudo)
+                else:
+                    clientes = {} # Arquivo vazio, tratamos como dicionário novo
+        except json.JSONDecodeError:
+            print("Aviso: Arquivo JSON corrompido ou vazio. Reiniciando base.")
+            clientes = {}
+    else:
+        clientes = {}
+    
+    if(email in clientes):
+        conexao.send("Este email já existe".encode())
+        return
+
+    clientes[email] = {
+        "senha":senha, 
+        "saldo": 1000.0, 
+        'ativos': {acao: 0 for acao in preco_acoes}
+    }
+
     with open(caminho, 'w', encoding='utf-8') as f:
-        json.dump(carteira, f, ensure_ascii=False, indent=4)
+        json.dump(clientes, f, ensure_ascii=False, indent=4)
+
+
+# def criar_carteira_json(endereco, carteira):
+#     caminho = _caminho_json_cliente(endereco)
+#     with open(caminho, 'w', encoding='utf-8') as f:
+#         json.dump(carteira, f, ensure_ascii=False, indent=4)
 
 preco_acoes:dict[str, float] = {
     'SANB11': 20.0,
@@ -56,11 +107,19 @@ def carregar_carteira(endereco):
     return None
 
 
-def salvar_carteira(endereco, carteira):
-    caminho = _caminho_json_cliente(endereco)
-    with open(caminho, 'w', encoding='utf-8') as f:
-        json.dump(carteira, f, ensure_ascii=False, indent=4)
+# def salvar_carteira(endereco, carteira):
+#     caminho = _caminho_json_cliente(endereco)
+#     with open(caminho, 'w', encoding='utf-8') as f:
+#         json.dump(carteira, f, ensure_ascii=False, indent=4)
 
+def salvar_carteira(email, novos_dados_cliente):
+    caminho = _caminho_json_cliente()
+    with open(caminho, 'r', encoding='utf-8') as f:
+        todos_clientes = json.load(f)
+    todos_clientes[email].update(novos_dados_cliente)
+
+    with open(caminho, 'w', encoding='utf-8') as f:
+        json.dump(todos_clientes, f, ensure_ascii=False, indent=4)
 
 att_cotacoes:bool = False
 def gerar_mensagem_cotacoes(conexao:socket.socket)->None:
@@ -86,21 +145,79 @@ def atualizar_cotacoes()->None:
             variacao:float = round(random.uniform(-1.0, 1.0), 2)
             novo_preco:float = preco_acoes[acao] + variacao
             preco_acoes[acao] = max(10.0, min(30.0, round(novo_preco, 2)))
-        time.sleep(15)
+        time.sleep(2)
 
 def processar_cliente(conexao:socket.socket, endereco:str)->None:
     global att_cotacoes
 
-    dados_cliente = carregar_carteira(endereco)
-    if dados_cliente is None:
-        dados_cliente = {
-            'saldo': 10000.0,
-            'ativos': {acao: 0 for acao in preco_acoes}
-        }
-        salvar_carteira(endereco, dados_cliente)
+    email_usuario = None
+    dados_cliente = ""
+    clientes = {}
+    mensagem:str = f'{"="*20} MENU {"="*20}'
+    conexao.send(mensagem.encode())
+    while not email_usuario:
+        conexao.send(b"Possui uma conta? (s/n) ou 'sair':")
+        resposta:str = conexao.recv(1024).decode().strip()
 
-    loop_cotacoes = threading.Thread(target=gerar_mensagem_cotacoes, args=(conexao,), daemon=True)
-    
+        if(resposta in ['n', 'nao', 'não', 'noa']):
+            criar_login(conexao)
+        elif(resposta in ['s', 'sim', 'si', 'sin', 'smi', 'msi', 'mis']):
+            conexao.send(b"Digite seu email: ")
+            email = conexao.recv(1024).decode().strip()
+            conexao.send(b"Digite sua senha: ")
+            senha = conexao.recv(1024).decode().strip()
+            caminho = _caminho_json_cliente()
+
+            if os.path.exists(caminho):
+                try:
+                    with open(caminho, 'r', encoding='utf-8') as f:
+                        conteudo = f.read()
+                        if conteudo.strip():
+                            clientes = json.loads(conteudo)
+                        else:
+                            clientes = {}
+                    if(email in clientes and clientes[email]['senha'] == senha):
+                        email_usuario = email
+                        dados_cliente = clientes[email_usuario]
+                        conexao.send(b"\t===LOGIN FETUADO COM SUCESSO===\n")
+                        time.sleep(1)
+                        conexao.send(b"OK")
+                        conexao.send("*Aperte ENTER para continuar".encode())
+                        # soh roda o loop das cotacoes quando o login for executado
+                        loop_cotacoes = threading.Thread(target=gerar_mensagem_cotacoes, args=(conexao,), daemon=True)
+                    else:
+                        conexao.send(b"Email ou senha invalidos. Tente novamente\n")        
+                except json.JSONDecodeError:
+                    print("Aviso: Arquivo JSON corrompido ou vazio. Reiniciando base.")
+                    clientes = {}
+            else:
+                conexao.send(b"Nenhum usuario cadastrado no sistem.\n")
+                clientes = {}
+
+        elif(resposta in ['sair', 'sir', 'exit', 'esit', 'eksit', 'equisit']):
+            conexao.send(f"{'='*25} SESSAO ABORTADA {'='*25}".encode())
+            conexao.close()            
+        else:
+            mensagem:str = "Comando não reconhecido"
+            conexao.send(mensagem.encode())
+
+    ### reutilizado em outros defs para especificar o cliente
+    # dados_cliente = carregar_carteira(endereco)
+    # if dados_cliente is None:
+    #     dados_cliente = {
+    #         'saldo': 1000.0,
+    #         'ativos': {acao: 0 for acao in preco_acoes}
+    #     }
+    #     # salvar_carteira(endereco, dados_cliente)
+    #     salvar_carteira(email, dados_cliente)
+    # else:
+    #     saldo, ativos = login()
+    #     dados_cliente = {
+    #         "saldo": saldo,
+    #         "ativos": ativos
+    #     }
+    #     salvar_carteira(email, dados_cliente)
+
     while True:
         try:
             comando:str = conexao.recv(1024).decode().strip()
@@ -128,7 +245,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                     valor_total = preco_unitario * quantidade
                     dados_cliente['saldo'] -= valor_total
                     dados_cliente['ativos'][acao] += quantidade
-                    salvar_carteira(endereco, dados_cliente)
+                    salvar_carteira(email_usuario, dados_cliente)
 
                     mensagem:str = (
                         f'Compra realizada: {quantidade} {acao} '
@@ -152,7 +269,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
                 else:
                     dados_cliente['saldo'] += preco_acoes[acao] * quantidade
                     dados_cliente['ativos'][acao] -= quantidade
-                    salvar_carteira(endereco, dados_cliente)
+                    salvar_carteira(email_usuario, dados_cliente)
 
                     conexao.send(f'Venda realizada: {quantidade} {acao}\n'.encode())
                     
@@ -180,7 +297,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
         except:
             break
     
-    salvar_carteira(endereco, dados_cliente)
+    salvar_carteira(email_usuario, dados_cliente)
     conexao.close()
     if (conexao, endereco) in clientes_conectados:
         clientes_conectados.remove((conexao, endereco))

@@ -1,0 +1,28 @@
+{
+    "cachorro": {
+        "senha": "cachorro",
+        "saldo": 940.04,
+        "ativos": {
+            "SANB11": 0,
+            "BBAS3": 0,
+            "BBDC4": 2,
+            "ITUB4": 3,
+            "PETR4": 0,
+            "VALE3": 0,
+            "MGLU3": 0
+        }
+    },
+    "larissa": {
+        "senha": "larissa",
+        "saldo": 1000.0,
+        "ativos": {
+            "SANB11": 0,
+            "BBAS3": 0,
+            "BBDC4": 0,
+            "ITUB4": 0,
+            "PETR4": 0,
+            "VALE3": 0,
+            "MGLU3": 0
+        }
+    }
+}
