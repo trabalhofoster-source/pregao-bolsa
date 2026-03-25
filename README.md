@@ -40,6 +40,27 @@
         - Venda realizada: 4 PETR4
     Por fim, querendo sair do programa client.py, é necessário digita ":exit" que o programa será finalizado, e mostrado no log "Conexão encerrada pelo cliente.".
 
+
+    Sistema de Login e Cadastro.
+    Esse sistema garante que cada cliente possa ter sua própria conta, com seus próprios dados.
+    A conta é criada no proprio painel, o cliente se cadastra informando:
+        - Email
+        - Senha
+        - Confirmação de senha
+
+    Após isso, basta fazer login com a sua conta e usar o painel do cliente normalmente.
+
+    Banco de Dados
+    Um banco de dados garante que as informações não sejam perdidas quando o servidor estiver fechado.
+    As infomações que ele guarda são:
+        - Login
+        - Senha
+        - Saldo na carteira
+        - Quantidade de ativos
+
+    O banco de dados é um JSON simples, que guarda de maneira eficiente todos esses dados.
+    O uso de JSON foi escolhido por ser simples e eficiente para este tipo de aplicação.
+
 ## Bibliotecas
     Bibliotecas utilizadas:
         - socket
