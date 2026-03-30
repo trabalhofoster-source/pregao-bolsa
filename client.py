@@ -150,12 +150,13 @@ def ler_linha(fila: "queue.Queue[str | None]") -> str | None:
 
 def receber_mensagens(sock: socket.socket, fila: "queue.Queue[str | None]") -> None:
     global conectado, logado
+    servidor_caiu = False
     try:
         while conectado:
             try:
                 dados: bytes = sock.recv(4096)
                 if not dados:
-                    print("\n[INFO]\nConexão encerrada pelo servidor.")
+                    servidor_caiu = logado
                     break
                 mensagem = dados.decode(errors="ignore")
 
@@ -166,12 +167,23 @@ def receber_mensagens(sock: socket.socket, fila: "queue.Queue[str | None]") -> N
                 fila.put(mensagem)
 
             except OSError:
+                servidor_caiu = True
                 break
-            except Exception as e:
-                print(f"\n[ALERTA]\nErro ao receber dados: {e}")
+            except Exception:
+                servidor_caiu = True
                 break
     finally:
         conectado = False
+        try:
+            sock.close()
+        except OSError:
+            pass
+        if servidor_caiu:
+            print("\n\n" + "=" * 50)
+            print("  SERVIDOR CAIU! Conexão perdida.")
+            print("  O cliente será encerrado.")
+            print("=" * 50)
+            os._exit(1)
         try:
             fila.put_nowait(None)
         except queue.Full:
@@ -196,6 +208,7 @@ def encerrar_conexao(sock: socket.socket) -> None:
     except OSError:
         pass
     print("Conexão encerrada pelo cliente.")
+    os._exit(0)
 
 
 def enviar_comandos(sock: socket.socket) -> None:
@@ -224,7 +237,7 @@ def enviar_comandos(sock: socket.socket) -> None:
             except OSError:
                 pass
             print("\nConexão encerrada pelo cliente (interrupção).")
-            break
+            os._exit(0)
         except OSError:
             break
         time.sleep(0.5)
@@ -245,6 +258,12 @@ def main() -> None:
         print(f"Não foi possível conectar ao servidor: {e}")
         return
 
+    primeira = sock.recv(4096).decode(errors="ignore")
+    if "cheio" in primeira.lower():
+        print(f"\n{primeira.strip()}")
+        sock.close()
+        return
+
     fila_mensagens = queue.Queue()
     conectado = True
 
@@ -252,6 +271,8 @@ def main() -> None:
     print(f"\n{horario}: CONECTADO!!")
 
     print("Siga as instruções na tela para Login ou Cadastro.")
+
+    fila_mensagens.put(primeira)
 
     thread_receber = threading.Thread(
         target=receber_mensagens, args=(sock, fila_mensagens), daemon=True

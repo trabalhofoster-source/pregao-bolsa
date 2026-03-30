@@ -78,7 +78,18 @@ preco_acoes:dict[str, float] = {
 
 # Agora a carteira é persistida via JSON de cada cliente
 # carteira_clientes:dict[str, dict[str, float|dict[str, int]]] = {}
-clientes_conectados:list[tuple[str,str]] = []
+clientes_conectados:list[tuple] = []
+
+
+def desconectar_todos_clientes():
+    global clientes_ativos
+    for conexao, _ in clientes_conectados:
+        try:
+            conexao.close()
+        except OSError:
+            pass
+    clientes_conectados.clear()
+    clientes_ativos = 0
 
 
 def carregar_carteira(endereco:str)->None|dict[str,str]:
@@ -128,6 +139,30 @@ def atualizar_cotacoes()->None:
         time.sleep(2)
 
 def processar_cliente(conexao:socket.socket, endereco:str)->None:
+    global att_cotacoes, clientes_ativos
+
+    email_usuario = None
+    dados_cliente = ""
+    clientes = {}
+    try:
+        _processar_cliente_interno(conexao, endereco)
+    except Exception:
+        pass
+    finally:
+        try:
+            conexao.close()
+        except OSError:
+            pass
+        with lock_clientes:
+            if clientes_ativos > 0:
+                clientes_ativos -= 1
+        if (conexao, endereco) in clientes_conectados:
+            clientes_conectados.remove((conexao, endereco))
+            n = len(clientes_conectados)
+            print(f"\rCliente {endereco} saiu. Clientes conectados: {n}                    \nEscolha: ", end="")
+
+
+def _processar_cliente_interno(conexao:socket.socket, endereco:str)->None:
     global att_cotacoes
 
     email_usuario = None
@@ -176,9 +211,7 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
 
         elif(resposta in ['sair', 'sir', 'exit', 'esit', 'eksit', 'equisit']):
             conexao.send(f"{'='*25} SESSAO ABORTADA {'='*25}".encode())
-            with lock_clientes:
-                clientes_ativos -= 1
-            conexao.close()            
+            return            
         else:
             mensagem:str = "Comando não reconhecido"
             conexao.send(mensagem.encode())
@@ -260,17 +293,11 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
         except:
             break
     
-    salvar_carteira(email_usuario, dados_cliente)
-    conexao.close()
-    with lock_clientes:
-        clientes_ativos -= 1
-    if (conexao, endereco) in clientes_conectados:
-        clientes_conectados.remove((conexao, endereco))
-        n:int = len(clientes_conectados)
-        print(f"\rCliente {endereco} saiu. Clientes conectados: {n}                    \nEscolha: ", end="")
+    if email_usuario and dados_cliente:
+        salvar_carteira(email_usuario, dados_cliente)
 
 def servidor_principal()->None:
-    global servidor_socket
+    global servidor_socket, clientes_ativos
 
     servidor_socket = socket.socket()
     servidor_socket.bind(('127.0.0.1', 12345))
@@ -286,6 +313,7 @@ def servidor_principal()->None:
             with lock_clientes:
                 if clientes_ativos >= MAX_CLIENTES:
                     conexao.send(b"Servidor cheio. Maximo 2 clientes.\n")
+                    time.sleep(0.5)
                     conexao.close()
                     continue
                 clientes_ativos += 1
@@ -332,6 +360,7 @@ def menu_principal()->None:
             
         elif opcao == '2' and servidor_ativo:
             servidor_ativo = False
+            desconectar_todos_clientes()
             os.system('cls' if os.name == 'nt' else 'clear')
             terminar_servidor()
             if servidor_socket:
@@ -342,6 +371,7 @@ def menu_principal()->None:
         elif opcao == '3':
             if servidor_ativo:
                 servidor_ativo = False
+                desconectar_todos_clientes()
                 if servidor_socket:
                     servidor_socket.close()
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -356,6 +386,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\nAVISO: Interrupção por teclado detectada")
         print("AVISO: Desligando servidor", end="")
+        desconectar_todos_clientes()
         for i in range(random.randint(4, 6)):
             print(end='.')
             time.sleep(random.uniform(0.5,1.5))
