@@ -7,23 +7,11 @@ import json
 
 servidor_socket = None
 servidor_ativo = False
+lock_json = threading.Lock()
 
 DIRETORIO_CARTEIRAS = 'carteiras_clientes'
 
-
-# def _normalizar_endereco(endereco):
-#     if isinstance(endereco, tuple):
-#         host, porta = endereco
-#         return f"{host}_{porta}"
-#     return str(endereco).replace(':', '_').replace('/', '_').replace('\\', '_')
-
-# def _caminho_json_cliente(endereco):
-#     if not os.path.exists(DIRETORIO_CARTEIRAS):
-#         os.makedirs(DIRETORIO_CARTEIRAS, exist_ok=True)
-#     nome = _normalizar_endereco(endereco)
-#     return os.path.join(DIRETORIO_CARTEIRAS, f"{nome}.json")
-
-def _caminho_json_cliente():
+def _caminho_json_cliente()->str:
     if not os.path.exists(DIRETORIO_CARTEIRAS):
         os.makedirs(DIRETORIO_CARTEIRAS, exist_ok=True)
     return os.path.join(DIRETORIO_CARTEIRAS, f"clientes.json")
@@ -50,12 +38,11 @@ def criar_login(conexao:socket.socket)->None:
     if(os.path.exists(caminho)):
         try:
             with open(caminho, 'r', encoding='utf-8') as f:
-                # Verifica se o arquivo não está vazio antes de carregar
                 conteudo = f.read()
-                if conteudo.strip(): # Se tiver algum texto
+                if conteudo.strip():
                     clientes = json.loads(conteudo)
                 else:
-                    clientes = {} # Arquivo vazio, tratamos como dicionário novo
+                    clientes = {}
         except json.JSONDecodeError:
             print("Aviso: Arquivo JSON corrompido ou vazio. Reiniciando base.")
             clientes = {}
@@ -75,12 +62,6 @@ def criar_login(conexao:socket.socket)->None:
     with open(caminho, 'w', encoding='utf-8') as f:
         json.dump(clientes, f, ensure_ascii=False, indent=4)
 
-
-# def criar_carteira_json(endereco, carteira):
-#     caminho = _caminho_json_cliente(endereco)
-#     with open(caminho, 'w', encoding='utf-8') as f:
-#         json.dump(carteira, f, ensure_ascii=False, indent=4)
-
 preco_acoes:dict[str, float] = {
     'SANB11': 20.0,
     'BBAS3': 20.0,
@@ -96,8 +77,8 @@ preco_acoes:dict[str, float] = {
 clientes_conectados:list[tuple[str,str]] = []
 
 
-def carregar_carteira(endereco):
-    caminho = _caminho_json_cliente(endereco)
+def carregar_carteira(endereco:str)->None|dict[str,str]:
+    caminho:str = _caminho_json_cliente(endereco)
     if os.path.exists(caminho):
         try:
             with open(caminho, 'r', encoding='utf-8') as f:
@@ -106,20 +87,15 @@ def carregar_carteira(endereco):
             pass
     return None
 
-
-# def salvar_carteira(endereco, carteira):
-#     caminho = _caminho_json_cliente(endereco)
-#     with open(caminho, 'w', encoding='utf-8') as f:
-#         json.dump(carteira, f, ensure_ascii=False, indent=4)
-
 def salvar_carteira(email, novos_dados_cliente):
-    caminho = _caminho_json_cliente()
-    with open(caminho, 'r', encoding='utf-8') as f:
-        todos_clientes = json.load(f)
-    todos_clientes[email].update(novos_dados_cliente)
+    with lock_json:
+        caminho = _caminho_json_cliente()
+        with open(caminho, 'r', encoding='utf-8') as f:
+            todos_clientes = json.load(f)
+        todos_clientes[email].update(novos_dados_cliente)
 
-    with open(caminho, 'w', encoding='utf-8') as f:
-        json.dump(todos_clientes, f, ensure_ascii=False, indent=4)
+        with open(caminho, 'w', encoding='utf-8') as f:
+            json.dump(todos_clientes, f, ensure_ascii=False, indent=4)
 
 att_cotacoes:bool = False
 def gerar_mensagem_cotacoes(conexao:socket.socket)->None:
@@ -201,23 +177,6 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
             mensagem:str = "Comando não reconhecido"
             conexao.send(mensagem.encode())
 
-    ### reutilizado em outros defs para especificar o cliente
-    # dados_cliente = carregar_carteira(endereco)
-    # if dados_cliente is None:
-    #     dados_cliente = {
-    #         'saldo': 1000.0,
-    #         'ativos': {acao: 0 for acao in preco_acoes}
-    #     }
-    #     # salvar_carteira(endereco, dados_cliente)
-    #     salvar_carteira(email, dados_cliente)
-    # else:
-    #     saldo, ativos = login()
-    #     dados_cliente = {
-    #         "saldo": saldo,
-    #         "ativos": ativos
-    #     }
-    #     salvar_carteira(email, dados_cliente)
-
     while True:
         try:
             comando:str = conexao.recv(1024).decode().strip()
@@ -286,8 +245,6 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
             
             elif comando == ':cotacao':
                 loop_cotacoes.start()
-                # mensagem:str = gerar_mensagem_cotacoes()
-                # conexao.send(mensagem.encode())
                 
             else:
                 if(att_cotacoes):
@@ -339,7 +296,7 @@ def terminar_servidor():
     print("3 - SAIR")
     print("=" * 50)
 
-def menu_principal():
+def menu_principal()->None:
     global servidor_ativo, servidor_socket
     os.system('cls' if os.name == 'nt' else 'clear')
     terminar_servidor()
@@ -378,4 +335,19 @@ def menu_principal():
             print("Opção inválida!")
 
 if __name__ == "__main__":
-    menu_principal()
+    try:
+        menu_principal()
+    except KeyboardInterrupt:
+        print("\n\nAVISO: Interrupção por teclado detectada")
+        print("AVISO: Desligando servidor", end="")
+        for i in range(random.randint(4, 6)):
+            print(end='.')
+            time.sleep(random.uniform(0.5,1.5))
+        if servidor_socket:
+            servidor_socket.close()
+        
+        os.system('cls' if os.name == 'nt' else 'clear')
+        fim:str = "AVISO: Servidor desligado"
+        print(f"\n{fim}")
+        print("="*(len(fim)))
+        print("\n"*20)

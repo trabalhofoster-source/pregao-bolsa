@@ -1,12 +1,12 @@
 {
     "cachorro": {
         "senha": "cachorro",
-        "saldo": 940.04,
+        "saldo": 1030.04,
         "ativos": {
             "SANB11": 0,
             "BBAS3": 0,
             "BBDC4": 2,
-            "ITUB4": 3,
+            "ITUB4": 0,
             "PETR4": 0,
             "VALE3": 0,
             "MGLU3": 0
@@ -21,6 +21,32 @@
             "BBDC4": 0,
             "ITUB4": 0,
             "PETR4": 0,
+            "VALE3": 0,
+            "MGLU3": 0
+        }
+    },
+    "marcus": {
+        "senha": "marcus123",
+        "saldo": 989.84,
+        "ativos": {
+            "SANB11": 0,
+            "BBAS3": 0,
+            "BBDC4": 0,
+            "ITUB4": 0,
+            "PETR4": 0,
+            "VALE3": 0,
+            "MGLU3": 0
+        }
+    },
+    "maria": {
+        "senha": "maria123",
+        "saldo": 948.68,
+        "ativos": {
+            "SANB11": 0,
+            "BBAS3": 0,
+            "BBDC4": 0,
+            "ITUB4": 0,
+            "PETR4": 4,
             "VALE3": 0,
             "MGLU3": 0
         }
