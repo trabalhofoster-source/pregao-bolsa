@@ -248,11 +248,10 @@ def main() -> None:
     fila_mensagens = queue.Queue()
     conectado = True
 
-    print("Siga as instruções na tela para Login ou Cadastro.")
-
     horario = time.strftime("%H:%M:%S")
     print(f"\n{horario}: CONECTADO!!")
-    print("Aguardando cotações do servidor...\n")
+
+    print("Siga as instruções na tela para Login ou Cadastro.")
 
     thread_receber = threading.Thread(
         target=receber_mensagens, args=(sock, fila_mensagens), daemon=True

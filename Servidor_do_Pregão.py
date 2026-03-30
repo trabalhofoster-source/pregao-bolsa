@@ -11,6 +11,10 @@ lock_json = threading.Lock()
 
 DIRETORIO_CARTEIRAS = 'carteiras_clientes'
 
+MAX_CLIENTES = 2
+clientes_ativos = 0
+lock_clientes = threading.Lock()
+
 def _caminho_json_cliente()->str:
     if not os.path.exists(DIRETORIO_CARTEIRAS):
         os.makedirs(DIRETORIO_CARTEIRAS, exist_ok=True)
@@ -172,6 +176,8 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
 
         elif(resposta in ['sair', 'sir', 'exit', 'esit', 'eksit', 'equisit']):
             conexao.send(f"{'='*25} SESSAO ABORTADA {'='*25}".encode())
+            with lock_clientes:
+                clientes_ativos -= 1
             conexao.close()            
         else:
             mensagem:str = "Comando não reconhecido"
@@ -256,6 +262,8 @@ def processar_cliente(conexao:socket.socket, endereco:str)->None:
     
     salvar_carteira(email_usuario, dados_cliente)
     conexao.close()
+    with lock_clientes:
+        clientes_ativos -= 1
     if (conexao, endereco) in clientes_conectados:
         clientes_conectados.remove((conexao, endereco))
         n:int = len(clientes_conectados)
@@ -274,6 +282,14 @@ def servidor_principal()->None:
         try:
             servidor_socket.settimeout(1)
             conexao, endereco = servidor_socket.accept()
+
+            with lock_clientes:
+                if clientes_ativos >= MAX_CLIENTES:
+                    conexao.send(b"Servidor cheio. Maximo 2 clientes.\n")
+                    conexao.close()
+                    continue
+                clientes_ativos += 1
+
             clientes_conectados.append((conexao, endereco))
             n = len(clientes_conectados)
             print(f"\rCliente {endereco} conectado. Clientes conectados: {n}                    \nEscolha: ", end="")
